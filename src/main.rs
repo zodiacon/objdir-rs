@@ -2,13 +2,24 @@ use winapi::shared::ntdef::*;
 use ntapi::ntobapi::*;
 use ntapi::ntrtl::*;
 
+#[derive(Debug, Clone)]
+struct ObjectInfo {
+    name: String,
+    typename: String,
+    target: String,
+}
+
 fn main() {
-    let dir = std::env::args().skip(1).next().unwrap_or("\\".to_owned());
+    let dir = std::env::args().skip(1).next().unwrap_or("\\Global??".to_owned());
     let result = enum_directory(&dir);
 match result {
     Ok(objects) => {
-        for (name, typename) in &objects {
-            println!("{name} ({typename})");
+        for obj in &objects {
+            print!("{} ({})", obj.name, obj.typename);
+            if !obj.target.is_empty() {
+                print!(" -> {}", obj.target);
+            }
+            println!();
         }
         println!("{} objects.", objects.len());
     },
@@ -16,7 +27,7 @@ match result {
 };
 }
 
-fn enum_directory(dir: &str) -> Result<Vec<(String, String)>, NTSTATUS> {
+fn enum_directory(dir: &str) -> Result<Vec<ObjectInfo>, NTSTATUS> {
     let mut items = vec![];
 
     unsafe {
@@ -44,13 +55,45 @@ fn enum_directory(dir: &str) -> Result<Vec<(String, String)>, NTSTATUS> {
                         let item = *obuffer;
                         let name = String::from_utf16_lossy(std::slice::from_raw_parts(item.Name.Buffer, (item.Name.Length / 2) as usize));
                         let typename = String::from_utf16_lossy(std::slice::from_raw_parts(item.TypeName.Buffer, (item.TypeName.Length / 2) as usize));
-                        items.push((name, typename));
+                        let target = if typename == "SymbolicLink" { get_symlink_target(&(String::from(dir) + "\\" + &name)) } else { String::new() };
+                        items.push(ObjectInfo { name, typename, target });
                         obuffer = obuffer.add(1);
                     }
                 }
+                NtClose(hdir);
                 Ok(items)
             },
             err => Err(err),
+        }
+    }
+}
+
+fn get_symlink_target(name: &str) -> String {
+    unsafe {
+        let name = string_to_wstring(&name);
+        let mut hsym = NULL;
+        let mut usym = UNICODE_STRING::default();
+        RtlInitUnicodeString(&mut usym, name.as_ptr());
+        let mut sym_attr = OBJECT_ATTRIBUTES::default();
+        InitializeObjectAttributes(&mut sym_attr, &mut usym, OBJ_CASE_INSENSITIVE, NULL, NULL);
+        if NtOpenSymbolicLinkObject(&mut hsym, SYMBOLIC_LINK_QUERY, &mut sym_attr) < 0 {
+            String::new()
+        }
+        else {
+            const LEN: u16 = 1 << 12;
+            let mut buffer: Vec<u16> = Vec::with_capacity((LEN / 2) as usize);
+            let mut uname = UNICODE_STRING::default();
+            uname.MaximumLength = LEN;
+            uname.Buffer = buffer.as_mut_ptr();
+            let mut size = 0;
+            let status = NtQuerySymbolicLinkObject(hsym, &mut uname, &mut size);
+            NtClose(hsym);
+            if status < 0 {
+                String::new()
+            }
+            else {
+                String::from_utf16_lossy(std::slice::from_raw_parts(uname.Buffer, (uname.Length / 2) as usize))
+            }
         }
     }
 }
