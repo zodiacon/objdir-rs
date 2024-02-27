@@ -10,7 +10,7 @@ struct ObjectInfo {
 }
 
 fn main() {
-    let dir = std::env::args().skip(1).next().unwrap_or("\\Global??".to_owned());
+    let dir = std::env::args().skip(1).next().unwrap_or("\\".to_owned());
     let result = enum_directory(&dir);
 match result {
     Ok(objects) => {
