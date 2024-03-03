@@ -10,21 +10,21 @@ struct ObjectInfo {
 }
 
 fn main() {
-    let dir = std::env::args().skip(1).next().unwrap_or("\\".to_owned());
+    let dir = std::env::args().nth(1).unwrap_or("\\".to_owned());
     let result = enum_directory(&dir);
-match result {
-    Ok(objects) => {
-        for obj in &objects {
-            print!("{} ({})", obj.name, obj.typename);
-            if !obj.target.is_empty() {
-                print!(" -> {}", obj.target);
+    match result {
+        Ok(objects) => {
+            for obj in &objects {
+                print!("{} ({})", obj.name, obj.typename);
+                if !obj.target.is_empty() {
+                    print!(" -> {}", obj.target);
+                }
+                println!();
             }
-            println!();
-        }
-        println!("{} objects.", objects.len());
-    },
-    Err(status) => println!("Error: 0x{status:X}")
-};
+            println!("{} objects.", objects.len());
+        },
+        Err(status) => println!("Error: 0x{status:X}")
+    };
 }
 
 fn enum_directory(dir: &str) -> Result<Vec<ObjectInfo>, NTSTATUS> {
@@ -32,7 +32,7 @@ fn enum_directory(dir: &str) -> Result<Vec<ObjectInfo>, NTSTATUS> {
 
     unsafe {
         let mut udir = UNICODE_STRING::default();
-        let wdir = string_to_wstring(&dir);
+        let wdir = string_to_wstring(dir);
         RtlInitUnicodeString(&mut udir, wdir.as_ptr());
         let mut dir_attr = OBJECT_ATTRIBUTES::default();
         InitializeObjectAttributes(&mut dir_attr, &mut udir, OBJ_CASE_INSENSITIVE, NULL, NULL);
@@ -70,7 +70,7 @@ fn enum_directory(dir: &str) -> Result<Vec<ObjectInfo>, NTSTATUS> {
 
 fn get_symlink_target(name: &str) -> String {
     unsafe {
-        let name = string_to_wstring(&name);
+        let name = string_to_wstring(name);
         let mut hsym = NULL;
         let mut usym = UNICODE_STRING::default();
         RtlInitUnicodeString(&mut usym, name.as_ptr());
